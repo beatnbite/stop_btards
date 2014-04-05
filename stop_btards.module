@@ -1,0 +1,125 @@
+<?php
+
+/**
+ * @file
+ * Banning visitors searching for vulnerabilities on your web site/
+ */
+
+define('STOP_BTARDS_CALLBACK_PREFIX', 'btards');
+
+/**
+ * Implementation of hook_url_inbound_alter().
+ */
+function stop_btards_url_inbound_alter(&$path, $original_path, $path_language) {
+
+    if (preg_match(stop_btards_get_suspicious_url_pattern(), $original_path, $matches)) {
+
+        // We need the path to process outbound links properly (required by other modules like Global Redirect)
+        $path = STOP_BTARDS_CALLBACK_PREFIX . '/' . $path;
+    }
+}
+
+/**
+ * Returns the pattern to preg_match the requested URL against suspicious pages.
+ *
+ * @return string
+ */
+function stop_btards_get_suspicious_url_pattern() {
+
+    $btard_patterns = array(
+        'wp-login\.php',
+        'wp-admin',
+    );
+
+    return ('@' . join('|', $btard_patterns) . '@i');
+}
+
+/**
+ * Implementation of hook_url_outbound_alter().
+ */
+function stop_btards_url_outbound_alter(&$path, &$options, $original_path) {
+
+    if (preg_match('@^' . STOP_BTARDS_CALLBACK_PREFIX . '/(.*)$@i', $path, $matches)) {
+        $path = $matches[1];
+    }
+}
+
+/**
+ * Implementation of hook_menu().
+ */
+function stop_btards_menu() {
+
+    $items[STOP_BTARDS_CALLBACK_PREFIX] = array(
+        'page callback' => 'stop_btards_page_callback',
+        'type' => MENU_CALLBACK,
+        'access callback' => TRUE,
+    );
+
+    return $items;
+}
+
+/**
+ * Page callback function for "btards" route (all suspicious url are rewritten to this callback).
+ *
+ * @return integer
+ */
+function stop_btards_page_callback() {
+
+    // Ensure the logic below is always executed and the page is never cached
+    drupal_page_is_cacheable(FALSE);
+
+    $is_crawler = stop_btards_is_crawler();
+
+    if (!$is_crawler) {
+        // Ban the IP address unless it is a search engine crawler
+        watchdog('User visited a suspicious page', 'Suspicious page viewed by %ip. User agent: %agent', array('%ip' => ip_address(), '%agent' => stop_btards_get_user_agent()), WATCHDOG_WARNING);
+        system_block_ip_action();
+        drupal_block_denied(ip_address());
+
+    } else {
+        // Notify the administrator of a search engine crawler trying to index a suspicious page.
+        watchdog('Search engine crawled a suspicious page', 'Suspicious page crawled by %agent', array('%agent' => stop_btards_get_user_agent()), WATCHDOG_WARNING);
+    }
+
+    return $is_crawler ? MENU_NOT_FOUND : MENU_ACCESS_DENIED;
+}
+
+/**
+ * Get the user agent.
+ *
+ * @return string
+ */
+function stop_btards_get_user_agent()
+{
+    return isset($_SERVER['HTTP_USER_AGENT']) ? check_plain(trim($_SERVER['HTTP_USER_AGENT'])) : '';
+}
+
+/**
+ * Check whether it is a search engine crawler indexing the page, or not.
+ *
+ * @return boolean
+ */
+function stop_btards_is_crawler()
+{
+    $crawlers = array(
+        'jeeves',
+        'baidu',
+        'google', // Google Chrome has no "google" in its user agent string
+        'bot',
+        'feedfetcher',
+        'gsa',
+        'bing',
+        'hiptop',
+        'crawler',
+        'extractor',
+        'grapeshot',
+        'y!',
+        'yahoo',
+        'my browser',
+        'scooter',
+        'slurp',
+        'yandex',
+    );
+
+    return preg_match('@' . join('|', $crawlers) . '@i', stop_btards_get_user_agent());
+}
