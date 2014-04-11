@@ -29,6 +29,7 @@ function stop_btards_get_suspicious_url_pattern() {
     $btard_patterns = array(
         'wp-login\.php',
         'wp-admin',
+        'uploadify',
     );
 
     return ('@' . join('|', $btard_patterns) . '@i');
