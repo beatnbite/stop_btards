@@ -30,6 +30,9 @@ function stop_btards_get_suspicious_url_pattern() {
         'wp-login\.php',
         'wp-admin',
         'uploadify',
+        'netcat.admin',
+        'bitrix.admin',
+        'Result:.%ED%E5', //XRumer
     );
 
     return ('@' . join('|', $btard_patterns) . '@i');
